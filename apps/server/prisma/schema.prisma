@@ -14,3 +14,48 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id       String @id @default(ulid())
+  email    String @unique
+  name     String
+  password String
+  role     Role   @default(USER)
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Category {
+  id       String  @id @default(ulid())
+  name     String  @unique
+  description String?
+
+  sweets   Sweet[]
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([name])
+}
+
+model Sweet {
+  id       String  @id @default(ulid())
+  name     String
+  price    Decimal @db.Decimal(10, 2)
+  stock    Int
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([name])
+  @@index([categoryId])
+}
