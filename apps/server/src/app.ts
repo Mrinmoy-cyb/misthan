@@ -22,16 +22,15 @@ import express, {
 import authRouter from "@/routes/auth";
 import sweetsRouter from "@/routes/sweets";
 import categoryRouter from "@/routes/category";
+import path from "path";
+import { access } from "fs";
 
 // Create the Express app and register core middleware
 const app: Express = express()
   .use(express.json()) // Parse incoming JSON request bodies
   .use("/api/auth", authRouter) // Mount authentication routes under `/api/auth`
   .use("/api/sweets", sweetsRouter) // Mount sweets routes under `/api/sweets`
-  .use("/api/category", categoryRouter) // Mount category routes under `/api/category`
-  .get("/", (_req, res) => {
-    res.send("Hello, World!");
-  }); // Simple health route / sanity check
+  .use("/api/category", categoryRouter); // Mount category routes under `/api/category`
 
 /**
  * Generic JSON error handler.
@@ -45,6 +44,22 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   // Basic logging for visibility during development/tests
   console.error(err);
   res.status(500).json({ error: "Internal Server Error" });
+});
+
+app.use((req, res) => {
+  const filePath = path.join(
+    __dirname,
+    "apps\\frontend\\dist\\index.html",
+    "index.html",
+  );
+
+  access(filePath, (err) => {
+    if (err) {
+      return res.status(404).json({ error: "Not Found" });
+    } else {
+      return res.sendFile(filePath);
+    }
+  });
 });
 
 export { app };
