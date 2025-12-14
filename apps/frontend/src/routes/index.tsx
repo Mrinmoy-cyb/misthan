@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useSweets, useCategories, useSearchSweets } from '../lib/hooks'
 import { useAuth } from '../contexts/AuthContext'
+import { apiClient } from '../lib/api'
 import {
   Card,
   CardHeader,
@@ -33,6 +34,28 @@ function Home() {
   const [priceMin, setPriceMin] = useState('')
   const [priceMax, setPriceMax] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+  const [purchaseDialog, setPurchaseDialog] = useState<{ open: boolean; sweet: any | null }>({ open: false, sweet: null })
+  const [quantity, setQuantity] = useState(1)
+  const [purchaseError, setPurchaseError] = useState('')
+  const [purchaseLoading, setPurchaseLoading] = useState(false)
+
+  // Determine if we should search
+  const hasFilters = Boolean(
+    searchQuery || selectedCategory || priceMin || priceMax
+  )
+
+  // Fetch data (hooks must be called before any conditional returns)
+  const sweetsQuery = useSweets()
+  const categoriesQuery = useCategories()
+  const searchQuery_result = useSearchSweets(
+    {
+      name: searchQuery,
+      categoryId: selectedCategory,
+      priceMin: priceMin ? parseFloat(priceMin) : undefined,
+      priceMax: priceMax ? parseFloat(priceMax) : undefined,
+    },
+    hasFilters
+  )
 
   // Redirect to login if not authenticated
   if (authLoading) {
@@ -48,24 +71,6 @@ function Home() {
     return null
   }
 
-  // Determine if we should search
-  const hasFilters = Boolean(
-    searchQuery || selectedCategory || priceMin || priceMax
-  )
-
-  // Fetch data
-  const sweetsQuery = useSweets()
-  const categoriesQuery = useCategories()
-  const searchQuery_result = useSearchSweets(
-    {
-      name: searchQuery,
-      categoryId: selectedCategory,
-      priceMin: priceMin ? parseFloat(priceMin) : undefined,
-      priceMax: priceMax ? parseFloat(priceMax) : undefined,
-    },
-    hasFilters
-  )
-
   // Determine which data to display
   const sweets = hasFilters ? searchQuery_result.data : sweetsQuery.data
   const isLoading = hasFilters ? searchQuery_result.isLoading : sweetsQuery.isLoading
@@ -76,6 +81,43 @@ function Home() {
     setSelectedCategory('')
     setPriceMin('')
     setPriceMax('')
+  }
+
+  const handleOpenPurchaseDialog = (sweet: any) => {
+    setPurchaseDialog({ open: true, sweet })
+    setQuantity(1)
+    setPurchaseError('')
+  }
+
+  const handleClosePurchaseDialog = () => {
+    setPurchaseDialog({ open: false, sweet: null })
+    setQuantity(1)
+    setPurchaseError('')
+    setPurchaseLoading(false)
+  }
+
+  const handlePurchase = async () => {
+    if (!purchaseDialog.sweet) return
+    
+    if (quantity < 1 || quantity > purchaseDialog.sweet.stock) {
+      setPurchaseError(`Please enter a quantity between 1 and ${purchaseDialog.sweet.stock}`)
+      return
+    }
+
+    setPurchaseLoading(true)
+    setPurchaseError('')
+
+    try {
+      await apiClient.post(`/sweets/${purchaseDialog.sweet.id}/purchase`, { quantity })
+      // Refetch sweets to update stock
+      sweetsQuery.refetch()
+      if (hasFilters) searchQuery_result.refetch()
+      handleClosePurchaseDialog()
+    } catch (err: any) {
+      setPurchaseError(err.response?.data?.error || 'Purchase failed. Please try again.')
+    } finally {
+      setPurchaseLoading(false)
+    }
   }
 
   return (
@@ -236,33 +278,16 @@ function Home() {
                       <div className="border-t border-gray-200 pt-4">
                         <p className="text-sm text-gray-600">Price</p>
                         <p className="text-2xl font-bold text-blue-600">
-                          ${sweet.price.toFixed(2)}
+                          ${Number(sweet.price).toFixed(2)}
                         </p>
                       </div>
 
                       {/* Stock */}
                       <div>
                         <p className="text-sm text-gray-600">Stock</p>
-                        <div className="mt-1 flex items-center gap-2">
-                          <div className="flex-1 rounded-full bg-gray-200 h-2">
-                            <div
-                              className={cn(
-                                'h-full rounded-full transition-all',
-                                sweet.stock > 5
-                                  ? 'bg-green-500'
-                                  : sweet.stock > 0
-                                    ? 'bg-yellow-500'
-                                    : 'bg-red-500'
-                              )}
-                              style={{
-                                width: `${Math.min((sweet.stock / 10) * 100, 100)}%`,
-                              }}
-                            />
-                          </div>
-                          <span className="text-sm font-medium text-gray-700">
-                            {sweet.stock}
-                          </span>
-                        </div>
+                        <p className="text-lg font-semibold text-gray-900 mt-1">
+                          {sweet.stock} units
+                        </p>
                       </div>
 
                       {/* Created By */}
@@ -279,8 +304,9 @@ function Home() {
                         <Button
                           className="w-full"
                           disabled={sweet.stock === 0}
+                          onClick={() => handleOpenPurchaseDialog(sweet)}
                         >
-                          {sweet.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
+                          {sweet.stock === 0 ? 'Out of Stock' : 'Purchase'}
                         </Button>
                       </div>
                     </div>
@@ -291,6 +317,72 @@ function Home() {
           </div>
         )}
       </div>
+
+      {/* Purchase Dialog */}
+      {purchaseDialog.open && purchaseDialog.sweet && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              Purchase {purchaseDialog.sweet.name}
+            </h2>
+            
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600">Price per unit</p>
+                <p className="text-xl font-bold text-blue-600">
+                  ${Number(purchaseDialog.sweet.price).toFixed(2)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Available Stock: {purchaseDialog.sweet.stock}</p>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max={purchaseDialog.sweet.stock}
+                  value={quantity}
+                  onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                  className="w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="border-t pt-4">
+                <p className="text-sm text-gray-600">Total Price</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  ${(Number(purchaseDialog.sweet.price) * quantity).toFixed(2)}
+                </p>
+              </div>
+
+              {purchaseError && (
+                <Alert variant="destructive">
+                  {purchaseError}
+                </Alert>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <Button
+                  onClick={handleClosePurchaseDialog}
+                  variant="outline"
+                  className="flex-1"
+                  disabled={purchaseLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handlePurchase}
+                  className="flex-1"
+                  disabled={purchaseLoading}
+                >
+                  {purchaseLoading ? 'Processing...' : 'Buy Now'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
