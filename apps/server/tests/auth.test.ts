@@ -10,16 +10,34 @@
  * Express `app` and runs under Jest.
  */
 
-// Prevent Jest from importing the real Prisma Client (ESM) by
-// mocking the module at the top of the file before any imports.
+/**
+ * tests/auth.test.ts
+ *
+ * Integration tests for authentication endpoints. The tests mock the
+ * Prisma client so that we don't need a database connection during unit
+ * tests (this avoids ESM/CommonJS issues and makes tests fast and
+ * deterministic).
+ */
+// Prevent Jest from importing the real Prisma Client (ESM) by mocking
+// the module at the top of the file before any imports. The manual mock
+// also exports `__resetMocks()` which we call in `beforeEach` to keep
+// tests isolated.
 jest.mock('@/lib/prisma', () => ({
   __esModule: true,
   default: require('./__mocks__/prisma').default,
 }));
 
 import request from 'supertest'
-import { describe, test, expect, jest } from '@jest/globals'
+import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { app } from "../src/app";
+
+// Import the manual mock to access helpers like `__resetMocks`
+const prismaMock = require('./__mocks__/prisma');
+
+// Reset the mock state between tests to ensure isolation
+beforeEach(() => {
+  if (typeof prismaMock.__resetMocks === 'function') prismaMock.__resetMocks();
+});
 
 /**
  * Auth - Register
