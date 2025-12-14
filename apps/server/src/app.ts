@@ -18,21 +18,17 @@ import authRouter from "@/routes/auth";
 
 // Create the Express app and register core middleware
 const app: Express = express()
-  // Parse incoming JSON request bodies
-  .use(express.json())
-  // Mount authentication routes under `/api/auth`
-  .use("/api/auth", authRouter)
-  // Simple health route / sanity check
+  .use(express.json()) // Parse incoming JSON request bodies
+  .use("/api/auth", authRouter) // Mount authentication routes under `/api/auth`
   .get("/", (_req, res) => {
     res.send("Hello, World!");
-  });
-
+  }); // Simple health route / sanity check
 
 // Generic JSON error handler for API routes. This ensures we consistently
 // return JSON error responses instead of the default HTML error page.
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error(err);
-  res.status(500).json({ error: 'Internal Server Error' });
+  res.status(500).json({ error: "Internal Server Error" });
 });
 
 export { app };
