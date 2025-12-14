@@ -18,7 +18,6 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { formatZodErrors } from "@/utility/zod-error-formatter";
 
-
 const router: Router = express.Router();
 
 /**
@@ -30,10 +29,21 @@ const router: Router = express.Router();
  */
 const RegisterSchema = z.object({
   email: z.string().email({ message: "Provide a valid email address." }),
-  name: z.string().min(1, { message: "User name is required for account creation." }),
-  password: z.string().min(8, { message: "Password must be at least 8 characters" }),
+  name: z
+    .string()
+    .min(1, { message: "User name is required for account creation." }),
+  password: z
+    .string()
+    .min(8, { message: "Password must be at least 8 characters" }),
 });
 
+/**
+ * Schema for login requests
+ */
+const LoginSchema = z.object({
+  email: z.email({ message: "Provide a valid email address." }),
+  password: z.string().min(1, { message: "Password is required" }),
+});
 
 /**
  * POST /register
@@ -58,7 +68,9 @@ router.post("/register", async (req, res) => {
     const existing = await prisma.user.findUnique({ where: { email } });
 
     if (existing) {
-      return res.status(409).json({ error: "A user with that email already exists" });
+      return res
+        .status(409)
+        .json({ error: "A user with that email already exists" });
     }
 
     // Hash password before persisting
@@ -90,8 +102,56 @@ router.post("/register", async (req, res) => {
   } catch (err: any) {
     // On database or unexpected errors, return a clear 503 JSON response
     console.error("Database error during registration:", err?.message || err);
-    return res.status(503).json({ error: "Database unavailable. Please try again later." });
+    return res
+      .status(503)
+      .json({ error: "Database unavailable. Please try again later." });
   }
+});
+
+/**
+ * POST /login
+ *
+ * Authenticates a user and sets an `auth-token` cookie on success.
+ * Behavior:
+ * - If a request already contains an `auth-token` cookie we return 400
+ *   to avoid double-authentication.
+ * - Validates input using Zod and returns structured validation errors.
+ * - Verifies the password using `bcrypt.compare` and returns 401 on failure.
+ * - On success issues a JWT and sets the `auth-token` cookie (HttpOnly).
+ */
+router.post("/login", async (req, res) => {
+  // Quick check: if a cookie header contains an `auth-token` assume the
+  // client is already authenticated and avoid additional login.
+  const cookieHeader = req.headers?.cookie ?? "";
+
+  if (cookieHeader.split(";").some((c) => c.trim().startsWith("auth-token="))) {
+    return res.status(400).json({ error: "Already authenticated" });
+  }
+
+  const parsed = LoginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: formatZodErrors(parsed.error) });
+  }
+
+  const { email, password } = parsed.data;
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return res.status(401).json({ error: "Invalid credentials" });
+
+  const match = await bcrypt.compare(password, (user as any).password);
+  if (!match) return res.status(401).json({ error: "Invalid credentials" });
+
+  const secret = process.env.JWT_SECRET || "test-secret";
+  const token = jwt.sign({ sub: user.id, email: user.email }, secret);
+
+  res.cookie("auth-token", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+
+  const { password: _pw, ...publicUser } = user as any;
+  return res.status(200).json({ user: publicUser });
 });
 
 export default router;
