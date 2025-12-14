@@ -77,6 +77,18 @@ describe("POST /api/sweets", () => {
     expect(res.body.sweet).toHaveProperty("name", "Truffle");
   });
 
+  test('GET /api/sweets returns all sweets', async () => {
+    const cat = await prismaMock.category.create({ data: { name: 'Gummies', description: '' } })
+    await prismaMock.sweet.create({ data: { name: 'Gum', price: 0.5, stock: 10, categoryId: cat.id } })
+    await prismaMock.sweet.create({ data: { name: 'Gummy Bear', price: 0.7, stock: 8, categoryId: cat.id } })
+
+    const res = await request(app).get('/api/sweets')
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveProperty('sweets')
+    expect(Array.isArray(res.body.sweets)).toBe(true)
+    expect(res.body.sweets.map((s: any) => s.name)).toEqual(expect.arrayContaining(['Gum', 'Gummy Bear']))
+  })
+
   test('returns detailed errors when payload invalid', async () => {
     const admin = await prismaMock.user.create({ data: { email: 'v@example.com', name: 'Validator', password: 'x', role: 'ADMIN' } })
     const token = jwt.sign({ sub: admin.id, email: admin.email }, SECRET)

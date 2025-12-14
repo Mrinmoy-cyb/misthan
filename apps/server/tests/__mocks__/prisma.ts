@@ -92,6 +92,9 @@ const prisma = {
       sweets.push(sweet);
       return sweet;
     }),
+    findMany: jest.fn(async () => {
+      return sweets.slice();
+    }),
   },
 };
 
