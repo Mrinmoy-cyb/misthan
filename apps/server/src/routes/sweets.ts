@@ -45,8 +45,83 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
 });
 
 // GET / - list all sweets (public)
-router.get("/", requireAuth, async (_req, res) => {
+router.get("/", async (_req, res) => {
   const sweets = await prisma.sweet.findMany({
+    include: {
+      category: true,
+    },
+  });
+
+  return res.status(200).json({ sweets });
+});
+
+// GET /search - search sweets by name, category, or price range (auth required)
+const emptyToUndefined = z
+  .string()
+  .trim()
+  .transform((v) => (v === "" ? undefined : v));
+
+export const SearchQuery = z
+  .object({
+    name: emptyToUndefined.optional(),
+
+    categoryId: emptyToUndefined.optional(),
+
+    priceMin: z.coerce.number().nonnegative().optional(),
+
+    priceMax: z.coerce.number().nonnegative().optional(),
+  })
+  .refine(
+    (q) =>
+      q.priceMin === undefined ||
+      q.priceMax === undefined ||
+      q.priceMin <= q.priceMax,
+    {
+      message: "Minimum price must be <= Maximum price",
+      path: ["priceMin"],
+    },
+  );
+
+router.get("/search", requireAuth, async (req, res) => {
+  const parsed = SearchQuery.safeParse(req.query);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      errors: formatZodErrors(parsed.error),
+    });
+  }
+
+  console.log("Parsed search query:", parsed.data);
+
+  const { name, categoryId, priceMin, priceMax } = parsed.data;
+
+  const where: any = {};
+
+  if (name) {
+    where.name = {
+      contains: name,
+      mode: "insensitive",
+    };
+  }
+
+  if (categoryId) {
+    where.categoryId = categoryId;
+  }
+
+  if (priceMin !== undefined || priceMax !== undefined) {
+    where.price = {};
+
+    if (priceMin !== undefined) {
+      where.price.gte = priceMin;
+    }
+
+    if (priceMax !== undefined) {
+      where.price.lte = priceMax;
+    }
+  }
+
+  const sweets = await prisma.sweet.findMany({
+    where,
     include: {
       category: true,
     },
