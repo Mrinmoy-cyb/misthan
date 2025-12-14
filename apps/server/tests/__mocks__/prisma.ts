@@ -82,6 +82,10 @@ const prisma = {
     }),
   },
   sweet: {
+    findUnique: jest.fn(async ({ where }: { where?: { id?: string } }) => {
+      if (where?.id) return sweets.find((s) => s.id === where.id) ?? null;
+      return null;
+    }),
     create: jest.fn(async ({ data }: { data: any }) => {
       const sweet = {
         ...data,
@@ -94,6 +98,18 @@ const prisma = {
     }),
     findMany: jest.fn(async () => {
       return sweets.slice();
+    }),
+    update: jest.fn(async ({ where, data }: { where: any; data: any }) => {
+      const idx = sweets.findIndex((s) => s.id === where.id);
+      if (idx === -1) throw new Error("Not found");
+      sweets[idx] = { ...sweets[idx], ...data, updatedAt: new Date() };
+      return sweets[idx];
+    }),
+    delete: jest.fn(async ({ where }: { where: any }) => {
+      const idx = sweets.findIndex((s) => s.id === where.id);
+      if (idx === -1) throw new Error("Not found");
+      const [deleted] = sweets.splice(idx, 1);
+      return deleted;
     }),
   },
 };

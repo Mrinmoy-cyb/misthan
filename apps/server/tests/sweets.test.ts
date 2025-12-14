@@ -88,7 +88,22 @@ describe("POST /api/sweets", () => {
       data: { name: "Gummy Bear", price: 0.7, stock: 8, categoryId: cat.id },
     });
 
-    const res = await request(app).get("/api/sweets");
+    const user = await prismaMock.user.create({
+      data: {
+        email: "list@example.com",
+        name: "Lister",
+        password: "x",
+        role: "USER",
+      },
+    });
+    const token = require("jsonwebtoken").sign(
+      { sub: user.id, email: user.email },
+      process.env.JWT_SECRET || "test-secret",
+    );
+
+    const res = await request(app)
+      .get("/api/sweets")
+      .set("Cookie", [`auth-token=${token}`]);
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("sweets");
     expect(Array.isArray(res.body.sweets)).toBe(true);
@@ -203,39 +218,200 @@ describe("POST /api/sweets", () => {
     const res = await request(app)
       .get("/api/sweets/search")
       .set("Cookie", [`auth-token=${token}`])
-      .query({ price_min: "1.5", price_max: "2.5" });
+      .query({ priceMin: "1.5", priceMax: "2.5" });
     expect(res.status).toBe(200);
     expect(res.body.sweets.map((s: any) => s.name)).toEqual(
       expect.arrayContaining(["Mid"]),
     );
   });
 
-  test("returns detailed errors when payload invalid", async () => {
-    const admin = await prismaMock.user.create({
-      data: {
-        email: "v@example.com",
-        name: "Validator",
-        password: "x",
-        role: "ADMIN",
-      },
+  describe("returns detailed errors when payload invalid", () => {
+    let admin: any;
+    beforeEach(async () => {
+      admin = await prismaMock.user.create({
+        data: {
+          email: "v@example.com",
+          name: "Validator",
+          password: "x",
+          role: "ADMIN",
+        },
+      });
     });
-    const token = jwt.sign({ sub: admin.id, email: admin.email }, SECRET);
 
-    const res = await request(app)
-      .post("/api/sweets")
-      .set("Cookie", [`auth-token=${token}`])
-      .send({});
+    describe("PUT /api/sweets/:id", () => {
+      test("requires authentication", async () => {
+        const res = await request(app).put("/api/sweets/1").send({ name: "X" });
+        expect(res.status).toBe(401);
+      });
 
-    expect(res.status).toBe(400);
-    expect(res.body).toHaveProperty("errors");
-    const errors = res.body.errors;
-    expect(errors).toHaveProperty("name");
-    expect(errors.name).toContain("Name is required");
-    expect(errors).toHaveProperty("price");
-    expect(errors.price).toContain("Price is required");
-    expect(errors).toHaveProperty("stock");
-    expect(errors.stock).toContain("Stock is required");
-    expect(errors).toHaveProperty("categoryId");
-    expect(errors.categoryId).toContain("Category ID is required");
+      test("requires admin", async () => {
+        const user = await prismaMock.user.create({
+          data: {
+            email: "u9@example.com",
+            name: "User9",
+            password: "x",
+            role: "USER",
+          },
+        });
+        const token = require("jsonwebtoken").sign(
+          { sub: user.id, email: user.email },
+          process.env.JWT_SECRET || "test-secret",
+        );
+        const res = await request(app)
+          .put("/api/sweets/1")
+          .set("Cookie", [`auth-token=${token}`])
+          .send({ name: "X" });
+        expect(res.status).toBe(403);
+      });
+
+      test("only creator admin can update", async () => {
+        const cat = await prismaMock.category.create({
+          data: { name: "UpCat", description: "" },
+        });
+        const admin1 = await prismaMock.user.create({
+          data: {
+            email: "a1@example.com",
+            name: "A1",
+            password: "x",
+            role: "ADMIN",
+          },
+        });
+        const admin2 = await prismaMock.user.create({
+          data: {
+            email: "a2@example.com",
+            name: "A2",
+            password: "x",
+            role: "ADMIN",
+          },
+        });
+        const sweet = await prismaMock.sweet.create({
+          data: {
+            name: "Orig",
+            price: 1,
+            stock: 1,
+            categoryId: cat.id,
+            userId: admin1.id,
+          },
+        });
+
+        const tokenOther = require("jsonwebtoken").sign(
+          { sub: admin2.id, email: admin2.email },
+          process.env.JWT_SECRET || "test-secret",
+        );
+        const resForbidden = await request(app)
+          .put(`/api/sweets/${sweet.id}`)
+          .set("Cookie", [`auth-token=${tokenOther}`])
+          .send({ name: "New" });
+        expect(resForbidden.status).toBe(403);
+
+        const tokenOwner = require("jsonwebtoken").sign(
+          { sub: admin1.id, email: admin1.email },
+          process.env.JWT_SECRET || "test-secret",
+        );
+        const resOk = await request(app)
+          .put(`/api/sweets/${sweet.id}`)
+          .set("Cookie", [`auth-token=${tokenOwner}`])
+          .send({ name: "New" });
+        expect(resOk.status).toBe(200);
+        expect(resOk.body).toHaveProperty("sweet");
+        expect(resOk.body.sweet).toHaveProperty("name", "New");
+      });
+    });
+
+    describe("DELETE /api/sweets/:id", () => {
+      test("requires authentication", async () => {
+        const res = await request(app).delete("/api/sweets/1");
+        expect(res.status).toBe(401);
+      });
+
+      test("requires admin", async () => {
+        const user = await prismaMock.user.create({
+          data: {
+            email: "u10@example.com",
+            name: "User10",
+            password: "x",
+            role: "USER",
+          },
+        });
+        const token = require("jsonwebtoken").sign(
+          { sub: user.id, email: user.email },
+          process.env.JWT_SECRET || "test-secret",
+        );
+        const res = await request(app)
+          .delete("/api/sweets/1")
+          .set("Cookie", [`auth-token=${token}`]);
+        expect(res.status).toBe(403);
+      });
+
+      test("only creator admin can delete", async () => {
+        const cat = await prismaMock.category.create({
+          data: { name: "DelCat", description: "" },
+        });
+        const admin1 = await prismaMock.user.create({
+          data: {
+            email: "d1@example.com",
+            name: "D1",
+            password: "x",
+            role: "ADMIN",
+          },
+        });
+        const admin2 = await prismaMock.user.create({
+          data: {
+            email: "d2@example.com",
+            name: "D2",
+            password: "x",
+            role: "ADMIN",
+          },
+        });
+        const sweet = await prismaMock.sweet.create({
+          data: {
+            name: "ToDel",
+            price: 1,
+            stock: 1,
+            categoryId: cat.id,
+            userId: admin1.id,
+          },
+        });
+
+        const tokenOther = require("jsonwebtoken").sign(
+          { sub: admin2.id, email: admin2.email },
+          process.env.JWT_SECRET || "test-secret",
+        );
+        const resForbidden = await request(app)
+          .delete(`/api/sweets/${sweet.id}`)
+          .set("Cookie", [`auth-token=${tokenOther}`]);
+        expect(resForbidden.status).toBe(403);
+
+        const tokenOwner = require("jsonwebtoken").sign(
+          { sub: admin1.id, email: admin1.email },
+          process.env.JWT_SECRET || "test-secret",
+        );
+        const resOk = await request(app)
+          .delete(`/api/sweets/${sweet.id}`)
+          .set("Cookie", [`auth-token=${tokenOwner}`]);
+        expect(resOk.status).toBe(200);
+        expect(resOk.body).toHaveProperty("deleted", true);
+      });
+    });
+    test("POST invalid payload returns detailed errors", async () => {
+      const token = jwt.sign({ sub: admin.id, email: admin.email }, SECRET);
+
+      const res = await request(app)
+        .post("/api/sweets")
+        .set("Cookie", [`auth-token=${token}`])
+        .send({});
+
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty("errors");
+      const errors = res.body.errors;
+      expect(errors).toHaveProperty("name");
+      expect(errors.name).toContain("Name is required");
+      expect(errors).toHaveProperty("price");
+      expect(errors.price).toContain("Price is required");
+      expect(errors).toHaveProperty("stock");
+      expect(errors.stock).toContain("Stock is required");
+      expect(errors).toHaveProperty("categoryId");
+      expect(errors.categoryId).toContain("Category ID is required");
+    });
   });
 });
