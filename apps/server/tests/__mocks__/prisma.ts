@@ -77,6 +77,9 @@ const prisma = {
       categories.push(category);
       return category;
     }),
+    findMany: jest.fn(async () => {
+      return categories.slice();
+    }),
   },
   sweet: {
     create: jest.fn(async ({ data }: { data: any }) => {
