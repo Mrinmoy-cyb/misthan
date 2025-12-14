@@ -15,11 +15,13 @@
  */
 import express, { type Express } from "express";
 import authRouter from "@/routes/auth";
+import sweetsRouter from "@/routes/sweets";
 
 // Create the Express app and register core middleware
 const app: Express = express()
   .use(express.json()) // Parse incoming JSON request bodies
   .use("/api/auth", authRouter) // Mount authentication routes under `/api/auth`
+  .use("/api/sweets", sweetsRouter) // Mount sweets routes under `/api/sweets`
   .get("/", (_req, res) => {
     res.send("Hello, World!");
   }); // Simple health route / sanity check

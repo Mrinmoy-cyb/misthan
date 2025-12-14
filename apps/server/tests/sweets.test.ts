@@ -76,4 +76,26 @@ describe("POST /api/sweets", () => {
     expect(res.body).toHaveProperty("sweet");
     expect(res.body.sweet).toHaveProperty("name", "Truffle");
   });
+
+  test('returns detailed errors when payload invalid', async () => {
+    const admin = await prismaMock.user.create({ data: { email: 'v@example.com', name: 'Validator', password: 'x', role: 'ADMIN' } })
+    const token = jwt.sign({ sub: admin.id, email: admin.email }, SECRET)
+
+    const res = await request(app)
+      .post('/api/sweets')
+      .set('Cookie', [`auth-token=${token}`])
+      .send({})
+
+    expect(res.status).toBe(400)
+    expect(res.body).toHaveProperty('errors')
+    const errors = res.body.errors
+    expect(errors).toHaveProperty('name')
+    expect(errors.name).toContain('Name is required')
+    expect(errors).toHaveProperty('price')
+    expect(errors.price).toContain('Price is required')
+    expect(errors).toHaveProperty('stock')
+    expect(errors.stock).toContain('Stock is required')
+    expect(errors).toHaveProperty('categoryId')
+    expect(errors.categoryId).toContain('Category ID is required')
+  })
 });
