@@ -91,4 +91,21 @@ describe("POST /api/category", () => {
     expect(res.status).toBe(409);
     expect(res.body).toHaveProperty("error", "Category already exists");
   });
+
+  test("GET /api/category returns all categories", async () => {
+    await prismaMock.category.create({
+      data: { name: "Alpha", description: "" },
+    });
+    await prismaMock.category.create({
+      data: { name: "Beta", description: "" },
+    });
+
+    const res = await request(app).get("/api/category");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("categories");
+    expect(Array.isArray(res.body.categories)).toBe(true);
+    expect(res.body.categories.map((c: any) => c.name)).toEqual(
+      expect.arrayContaining(["Alpha", "Beta"]),
+    );
+  });
 });
