@@ -38,17 +38,74 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
   if (!category) return res.status(400).json({ error: "Invalid category" });
 
   const sweet = await prisma.sweet.create({
-    data: { name, price, stock, categoryId },
+    data: { name, price, stock, categoryId, userId: (req as any).user.id },
   });
 
   return res.status(201).json({ sweet });
 });
 
-// GET / - list all sweets (public)
-router.get("/", async (_req, res) => {
+// Update a sweet - only admin and only the creator can update
+const UpdateSweetSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    price: z.number().nonnegative().optional(),
+    stock: z.number().int().nonnegative().optional(),
+    categoryId: z.string().optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, {
+    message: "At least one field is required",
+  });
+
+router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = UpdateSweetSchema.safeParse(req.body);
+
+  if (!parsed.success)
+    return res.status(400).json({ errors: formatZodErrors(parsed.error) });
+
+  const id = req.params.id;
+
+  const sweet = await prisma.sweet.findUnique({ where: { id } as any });
+
+  if (!sweet) return res.status(404).json({ error: "Not found" });
+
+  // Only the creator can modify
+  if (sweet.userId !== (req as any).user.id)
+    return res
+      .status(403)
+      .json({ error: "Only sweet owner allowed to update" });
+
+  const updated = await prisma.sweet.update({
+    where: { id } as any,
+    data: parsed.data,
+  });
+
+  return res.status(200).json({ sweet: updated });
+});
+
+// Delete a sweet - only admin and only the creator
+router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
+  const id = req.params.id;
+
+  const sweet = await prisma.sweet.findUnique({ where: { id } as any });
+
+  if (!sweet) return res.status(404).json({ error: "Not found" });
+
+  if (sweet.userId !== (req as any).user.id)
+    return res
+      .status(403)
+      .json({ error: "Only sweet owner allowed to delete" });
+
+  await prisma.sweet.delete({ where: { id } as any });
+
+  return res.status(200).json({ deleted: true });
+});
+
+// GET / - list all sweets (auth required)
+router.get("/", requireAuth, async (_req, res) => {
   const sweets = await prisma.sweet.findMany({
     include: {
       category: true,
+      user: true,
     },
   });
 
