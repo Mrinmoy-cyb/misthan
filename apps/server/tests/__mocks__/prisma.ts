@@ -20,18 +20,29 @@ import { jest } from "@jest/globals";
 
 // In-memory store of created users for the duration of the test run
 const users: any[] = [];
+const categories: any[] = [];
+const sweets: any[] = [];
 
 const prisma = {
   user: {
     // Mimics `prisma.user.findUnique({ where: { email } })`
-    findUnique: jest.fn(async ({ where }: { where: { email?: string } }) => {
-      if (where && where.email) return users.find((u) => u.email === where.email) ?? null;
-      return null;
-    }),
+    findUnique: jest.fn(
+      async ({ where }: { where?: { email?: string; id?: string } }) => {
+        if (where?.email)
+          return users.find((u) => u.email === where.email) ?? null;
+        if (where?.id) return users.find((u) => u.id === where.id) ?? null;
+        return null;
+      },
+    ),
 
     // Mimics `prisma.user.create({ data })` — returns the created user
     create: jest.fn(async ({ data }: { data: any }) => {
-      const user = { ...data, id: (users.length + 1).toString(), createdAt: new Date(), updatedAt: new Date() };
+      const user = {
+        ...data,
+        id: (users.length + 1).toString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
       users.push(user);
       return user;
     }),
@@ -47,6 +58,38 @@ const prisma = {
       return { count: 0 };
     }),
   },
+  category: {
+    findUnique: jest.fn(
+      async ({ where }: { where: { id?: string; name?: string } }) => {
+        if (where?.id) return categories.find((c) => c.id === where.id) ?? null;
+        if (where?.name)
+          return categories.find((c) => c.name === where.name) ?? null;
+        return null;
+      },
+    ),
+    create: jest.fn(async ({ data }: { data: any }) => {
+      const category = {
+        ...data,
+        id: (categories.length + 1).toString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      categories.push(category);
+      return category;
+    }),
+  },
+  sweet: {
+    create: jest.fn(async ({ data }: { data: any }) => {
+      const sweet = {
+        ...data,
+        id: (sweets.length + 1).toString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      sweets.push(sweet);
+      return sweet;
+    }),
+  },
 };
 
 /**
@@ -57,9 +100,14 @@ const prisma = {
 export function __resetMocks() {
   // Clear in-memory store but keep default implementations in place.
   users.length = 0;
+  categories.length = 0;
+  sweets.length = 0;
   prisma.user.findUnique.mockClear();
   prisma.user.create.mockClear();
   prisma.user.deleteMany.mockClear();
+  prisma.category.findUnique.mockClear();
+  prisma.category.create.mockClear();
+  prisma.sweet.create.mockClear();
 }
 
 export default prisma;
