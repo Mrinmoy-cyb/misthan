@@ -187,4 +187,60 @@ router.get("/search", requireAuth, async (req, res) => {
   return res.status(200).json({ sweets });
 });
 
+// POST /:id/purchase - purchase a quantity (auth required)
+const QuantitySchema = z.object({
+  quantity: z.coerce
+    .number()
+    .int()
+    .positive({ message: "Quantity must be a positive integer" }),
+});
+
+router.post("/:id/purchase", requireAuth, async (req, res) => {
+  const parsed = QuantitySchema.safeParse(req.body);
+
+  if (!parsed.success)
+    return res.status(400).json({ errors: formatZodErrors(parsed.error) });
+
+  const id = req.params.id;
+  const { quantity } = parsed.data;
+
+  const sweet = await prisma.sweet.findUnique({ where: { id } as any });
+  if (!sweet) return res.status(404).json({ error: "Not found" });
+
+  if (sweet.stock < quantity)
+    return res.status(400).json({ error: "Insufficient stock" });
+
+  const updated = await prisma.sweet.update({
+    where: { id } as any,
+    data: { stock: sweet.stock - quantity },
+  });
+
+  return res.status(200).json({ sweet: updated });
+});
+
+// POST /:id/restock - add stock (admin + owner)
+router.post("/:id/restock", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = QuantitySchema.safeParse(req.body);
+  if (!parsed.success)
+    return res.status(400).json({ errors: formatZodErrors(parsed.error) });
+
+  const id = req.params.id;
+  const { quantity } = parsed.data;
+
+  const sweet = await prisma.sweet.findUnique({ where: { id } as any });
+  if (!sweet) return res.status(404).json({ error: "Not found" });
+
+  if (sweet.userId !== (req as any).user.id)
+    return res
+      .status(403)
+      .json({ error: "Only sweet owner allowed to restock" });
+
+  const updated = await prisma.sweet.update({
+    where: { id } as any,
+    data: { stock: sweet.stock + quantity },
+  });
+
+  return res.status(200).json({ sweet: updated });
+});
+
 export default router;
