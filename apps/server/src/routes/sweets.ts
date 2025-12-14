@@ -44,4 +44,15 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
   return res.status(201).json({ sweet });
 });
 
+// GET / - list all sweets (public)
+router.get("/", requireAuth, async (_req, res) => {
+  const sweets = await prisma.sweet.findMany({
+    include: {
+      category: true,
+    },
+  });
+
+  return res.status(200).json({ sweets });
+});
+
 export default router;

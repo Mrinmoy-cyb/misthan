@@ -39,7 +39,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
 });
 
 // GET / - list all categories (public)
-router.get("/", async (_req, res) => {
+router.get("/", requireAuth, async (_req, res) => {
   const categories = await prisma.category.findMany();
 
   return res.status(200).json({ categories });
