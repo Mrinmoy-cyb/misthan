@@ -393,6 +393,158 @@ describe("POST /api/sweets", () => {
         expect(resOk.body).toHaveProperty("deleted", true);
       });
     });
+
+    describe("POST /api/sweets/:id/purchase", () => {
+      test("requires authentication", async () => {
+        const res = await request(app).post("/api/sweets/1/purchase").send({
+          quantity: 1,
+        });
+        expect(res.status).toBe(401);
+      });
+
+      test("reduces stock on purchase", async () => {
+        const cat = await prismaMock.category.create({
+          data: { name: "Pbuy", description: "" },
+        });
+        const buyer = await prismaMock.user.create({
+          data: {
+            email: "buyer@example.com",
+            name: "Buyer",
+            password: "x",
+            role: "USER",
+          },
+        });
+        const sweet = await prismaMock.sweet.create({
+          data: { name: "BuyMe", price: 1, stock: 5, categoryId: cat.id },
+        });
+
+        const token = require("jsonwebtoken").sign(
+          { sub: buyer.id, email: buyer.email },
+          process.env.JWT_SECRET || "test-secret",
+        );
+
+        const res = await request(app)
+          .post(`/api/sweets/${sweet.id}/purchase`)
+          .set("Cookie", [`auth-token=${token}`])
+          .send({ quantity: 2 });
+
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveProperty("sweet");
+        expect(res.body.sweet).toHaveProperty("stock", 3);
+      });
+
+      test("returns 400 when insufficient stock", async () => {
+        const cat = await prismaMock.category.create({
+          data: { name: "Pbuy2", description: "" },
+        });
+        const buyer = await prismaMock.user.create({
+          data: {
+            email: "buyer2@example.com",
+            name: "Buyer2",
+            password: "x",
+            role: "USER",
+          },
+        });
+        const sweet = await prismaMock.sweet.create({
+          data: { name: "LowStock", price: 1, stock: 1, categoryId: cat.id },
+        });
+
+        const token = require("jsonwebtoken").sign(
+          { sub: buyer.id, email: buyer.email },
+          process.env.JWT_SECRET || "test-secret",
+        );
+
+        const res = await request(app)
+          .post(`/api/sweets/${sweet.id}/purchase`)
+          .set("Cookie", [`auth-token=${token}`])
+          .send({ quantity: 2 });
+
+        expect(res.status).toBe(400);
+        expect(res.body).toHaveProperty("error");
+      });
+    });
+
+    describe("POST /api/sweets/:id/restock", () => {
+      test("requires authentication", async () => {
+        const res = await request(app).post("/api/sweets/1/restock").send({
+          quantity: 1,
+        });
+        expect(res.status).toBe(401);
+      });
+
+      test("requires admin", async () => {
+        const user = await prismaMock.user.create({
+          data: {
+            email: "u11@example.com",
+            name: "User11",
+            password: "x",
+            role: "USER",
+          },
+        });
+        const token = require("jsonwebtoken").sign(
+          { sub: user.id, email: user.email },
+          process.env.JWT_SECRET || "test-secret",
+        );
+        const res = await request(app)
+          .post("/api/sweets/1/restock")
+          .set("Cookie", [`auth-token=${token}`])
+          .send({ quantity: 1 });
+        expect(res.status).toBe(403);
+      });
+
+      test("only creator admin can restock", async () => {
+        const cat = await prismaMock.category.create({
+          data: { name: "RestockCat", description: "" },
+        });
+        const admin1 = await prismaMock.user.create({
+          data: {
+            email: "ra1@example.com",
+            name: "RA1",
+            password: "x",
+            role: "ADMIN",
+          },
+        });
+        const admin2 = await prismaMock.user.create({
+          data: {
+            email: "ra2@example.com",
+            name: "RA2",
+            password: "x",
+            role: "ADMIN",
+          },
+        });
+        const sweet = await prismaMock.sweet.create({
+          data: {
+            name: "RestMe",
+            price: 1,
+            stock: 1,
+            categoryId: cat.id,
+            userId: admin1.id,
+          },
+        });
+
+        const tokenOther = require("jsonwebtoken").sign(
+          { sub: admin2.id, email: admin2.email },
+          process.env.JWT_SECRET || "test-secret",
+        );
+        const resForbidden = await request(app)
+          .post(`/api/sweets/${sweet.id}/restock`)
+          .set("Cookie", [`auth-token=${tokenOther}`])
+          .send({ quantity: 5 });
+        expect(resForbidden.status).toBe(403);
+
+        const tokenOwner = require("jsonwebtoken").sign(
+          { sub: admin1.id, email: admin1.email },
+          process.env.JWT_SECRET || "test-secret",
+        );
+        const resOk = await request(app)
+          .post(`/api/sweets/${sweet.id}/restock`)
+          .set("Cookie", [`auth-token=${tokenOwner}`])
+          .send({ quantity: 5 });
+        expect(resOk.status).toBe(200);
+        expect(resOk.body).toHaveProperty("sweet");
+        expect(resOk.body.sweet).toHaveProperty("stock", 6);
+      });
+    });
     test("POST invalid payload returns detailed errors", async () => {
       const token = jwt.sign({ sub: admin.id, email: admin.email }, SECRET);
 
