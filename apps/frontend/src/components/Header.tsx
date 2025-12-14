@@ -1,6 +1,6 @@
 import { Link, useNavigate } from '@tanstack/react-router'
 
-import { LayoutDashboard, LogOut, Menu, X } from 'lucide-react'
+import { LayoutDashboard, LogOut, X } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -19,13 +19,6 @@ export default function Header() {
     <>
       <header className="p-4 flex items-center justify-between bg-gray-800 text-white shadow-lg">
         <div className="flex items-center">
-          <button
-            onClick={() => setIsOpen(true)}
-            className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
-            aria-label="Open menu"
-          >
-            <Menu size={24} />
-          </button>
           <h1 className="ml-4 text-xl font-semibold">
             <Link to="/">
               Misthan
@@ -43,6 +36,7 @@ export default function Header() {
                 title="Admin Dashboard"
               >
                 <LayoutDashboard size={20} />
+                
               </Link>
             )}
             <button
@@ -51,6 +45,7 @@ export default function Header() {
               title="Logout"
             >
               <LogOut size={20} />
+              
             </button>
           </div>
         )}
