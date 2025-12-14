@@ -18,12 +18,16 @@ coverage
 
 # Vercel
 .vercel
+.nitro
+.tanstack
+.wrangler
 
 # Build Outputs
 .next/
 out/
 build
 dist
+dist-ssr
 
 
 # Debug
