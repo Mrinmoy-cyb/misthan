@@ -10,8 +10,15 @@
  * Express `app` and runs under Jest.
  */
 
+// Prevent Jest from importing the real Prisma Client (ESM) by
+// mocking the module at the top of the file before any imports.
+jest.mock('@/lib/prisma', () => ({
+  __esModule: true,
+  default: require('./__mocks__/prisma').default,
+}));
+
 import request from 'supertest'
-import { describe, test, expect } from '@jest/globals'
+import { describe, test, expect, jest } from '@jest/globals'
 import { app } from "../src/app";
 
 /**
