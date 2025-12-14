@@ -6,6 +6,11 @@ import { formatZodErrors } from "@/utility/zod-error-formatter";
 
 const router: Router = express.Router();
 
+/**
+ * Schema for creating a category.
+ * - `name` is required and must be a non-empty string.
+ * - `description` is optional.
+ */
 const CreateCategorySchema = z.object({
   name: z
     .string({
@@ -15,6 +20,14 @@ const CreateCategorySchema = z.object({
   description: z.string().optional(),
 });
 
+/**
+ * POST /api/category
+ * - Requires authentication and admin privileges.
+ * - Validates the payload with Zod and returns detailed validation errors
+ *   using `formatZodErrors`.
+ * - Performs a case-insensitive duplicate check before creating the
+ *   category (returns 409 on conflict).
+ */
 router.post("/", requireAuth, requireAdmin, async (req, res) => {
   const parsed = CreateCategorySchema.safeParse(req.body);
   if (!parsed.success)
@@ -22,7 +35,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
 
   const { name, description } = parsed.data;
 
-  // Case-insensitive duplicate check
+  // Case-insensitive duplicate check: fetch all categories and compare
   const all = await prisma.category.findMany();
 
   const exists = all.find(
@@ -38,7 +51,12 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
   return res.status(201).json({ category });
 });
 
-// GET / - list all categories (auth required)
+/**
+ * GET /api/category
+ * - Returns a list of all categories.
+ * - Authentication is required so clients must be logged in to view
+ *   available categories.
+ */
 router.get("/", requireAuth, async (_req, res) => {
   const categories = await prisma.category.findMany();
 

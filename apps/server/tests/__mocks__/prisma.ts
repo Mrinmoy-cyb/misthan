@@ -1,31 +1,37 @@
 /**
- * Manual Jest mock for the Prisma client used in tests
+ * Jest mock for a minimal Prisma client used in tests.
  *
- * This mock is intentionally small and focused on the parts of the
- * Prisma client used by the authentication tests (`prisma.user`). It
- * provides:
+ * Overview:
+ * - Implements a small subset of Prisma models (`user`, `category`, `sweet`).
+ * - Each model exposes methods that mirror Prisma's API shape
+ *   (e.g., `findUnique`, `create`, `findMany`, `update`, `delete`).
+ * - All data is stored in simple in-memory arrays to keep tests fast
+ *   and deterministic without a database.
  *
- * - `findUnique`: returns a user by email or `null` when not found
- * - `create`: stores a user object in an in-memory array and returns it
- * - `deleteMany`: removes users by email or clears the store
+ * Usage in tests:
+ * - Imported via `jest.mock('@/lib/prisma', ...)` so application code
+ *   uses this mock instead of the real Prisma client.
+ * - Methods are `jest.fn()` allowing per-test overrides like
+ *   `mockImplementationOnce` and call assertions.
+ * - Call `__resetMocks()` in `beforeEach` to clear state between tests.
  *
- * Each function is implemented with `jest.fn()` so tests can:
- * - replace the implementation with `mockImplementationOnce` to simulate errors
- * - assert calls with `expect(prisma.user.create).toHaveBeenCalledWith(...)`
- *
- * The file also exports a small `__resetMocks` helper that tests can
- * call to clear internal state and reset the Jest mock metadata.
+ * Notes:
+ * - This mock is intentionally small and focused on the needs of the
+ *   current test suite. Add minimal methods as required by new tests.
  */
 import { jest } from "@jest/globals";
 
-// In-memory store of created users for the duration of the test run
+// In-memory stores of model records for the duration of the test run
 const users: any[] = [];
 const categories: any[] = [];
 const sweets: any[] = [];
 
 const prisma = {
   user: {
-    // Mimics `prisma.user.findUnique({ where: { email } })`
+    /**
+     * Mimics `prisma.user.findUnique({ where })`.
+     * Supports lookup by `email` or `id` and returns `null` when not found.
+     */
     findUnique: jest.fn(
       async ({ where }: { where?: { email?: string; id?: string } }) => {
         if (where?.email)
@@ -35,7 +41,10 @@ const prisma = {
       },
     ),
 
-    // Mimics `prisma.user.create({ data })` — returns the created user
+    /**
+     * Mimics `prisma.user.create({ data })` — returns the created user.
+     * Adds `id`, `createdAt`, and `updatedAt` fields.
+     */
     create: jest.fn(async ({ data }: { data: any }) => {
       const user = {
         ...data,
@@ -47,7 +56,10 @@ const prisma = {
       return user;
     }),
 
-    // Mimics `prisma.user.deleteMany({ where })` — supports clearing by email or full reset
+    /**
+     * Mimics `prisma.user.deleteMany({ where })`.
+     * Supports clearing by `email` or a full reset when `where` omitted.
+     */
     deleteMany: jest.fn(async ({ where }: { where?: any } = {}) => {
       if (where && where.email) {
         const idx = users.findIndex((u) => u.email === where.email);
@@ -59,6 +71,10 @@ const prisma = {
     }),
   },
   category: {
+    /**
+     * Mimics `prisma.category.findUnique({ where })`.
+     * Supports lookup by `id` or `name` (exact match) and returns `null` when not found.
+     */
     findUnique: jest.fn(
       async ({ where }: { where: { id?: string; name?: string } }) => {
         if (where?.id) return categories.find((c) => c.id === where.id) ?? null;
@@ -67,6 +83,9 @@ const prisma = {
         return null;
       },
     ),
+    /**
+     * Mimics `prisma.category.create({ data })`.
+     */
     create: jest.fn(async ({ data }: { data: any }) => {
       const category = {
         ...data,
@@ -77,15 +96,24 @@ const prisma = {
       categories.push(category);
       return category;
     }),
+    /**
+     * Mimics `prisma.category.findMany()` — returns a shallow copy of all categories.
+     */
     findMany: jest.fn(async () => {
       return categories.slice();
     }),
   },
   sweet: {
+    /**
+     * Mimics `prisma.sweet.findUnique({ where })`.
+     */
     findUnique: jest.fn(async ({ where }: { where?: { id?: string } }) => {
       if (where?.id) return sweets.find((s) => s.id === where.id) ?? null;
       return null;
     }),
+    /**
+     * Mimics `prisma.sweet.create({ data })`.
+     */
     create: jest.fn(async ({ data }: { data: any }) => {
       const sweet = {
         ...data,
@@ -96,15 +124,24 @@ const prisma = {
       sweets.push(sweet);
       return sweet;
     }),
+    /**
+     * Mimics `prisma.sweet.findMany()` — returns a shallow copy of all sweets.
+     */
     findMany: jest.fn(async () => {
       return sweets.slice();
     }),
+    /**
+     * Mimics `prisma.sweet.update({ where, data })`.
+     */
     update: jest.fn(async ({ where, data }: { where: any; data: any }) => {
       const idx = sweets.findIndex((s) => s.id === where.id);
       if (idx === -1) throw new Error("Not found");
       sweets[idx] = { ...sweets[idx], ...data, updatedAt: new Date() };
       return sweets[idx];
     }),
+    /**
+     * Mimics `prisma.sweet.delete({ where })`.
+     */
     delete: jest.fn(async ({ where }: { where: any }) => {
       const idx = sweets.findIndex((s) => s.id === where.id);
       if (idx === -1) throw new Error("Not found");
@@ -117,7 +154,7 @@ const prisma = {
 /**
  * Reset internal mock state and Jest mock metadata.
  *
- * Useful to call from `beforeEach` or `afterEach` in tests to ensure a clean state.
+ * Call from `beforeEach` or `afterEach` in tests to ensure a clean state.
  */
 export function __resetMocks() {
   // Clear in-memory store but keep default implementations in place.

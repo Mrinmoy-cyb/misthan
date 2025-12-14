@@ -1,12 +1,13 @@
 /**
- * tests/auth.test.ts
+ * Authentication integration tests
  *
- * Combined integration tests for authentication endpoints: registration
- * and login. Uses the manual Prisma mock for deterministic behavior and
- * resets mock state between tests.
+ * Verifies the registration and login endpoints using Supertest against the
+ * shared Express `app`. The Prisma client is mocked to keep tests isolated
+ * and deterministic without a real database. Each test resets the mock state
+ * so cases don't bleed into each other.
  */
 
-// Mock Prisma at the top to avoid ESM import and to control DB behaviour
+// Mock Prisma at the top to avoid ESM import issues and fully control DB behavior
 jest.mock("@/lib/prisma", () => ({
   __esModule: true,
   default: require("./__mocks__/prisma").default,
@@ -17,9 +18,11 @@ import { describe, test, expect, beforeEach } from "@jest/globals";
 import bcrypt from "bcryptjs";
 import { app } from "../src/app";
 
+// Access the mock module and its default export (the mock client)
 const prismaMockModule = require("./__mocks__/prisma");
 const prismaMock = prismaMockModule.default;
 
+// Ensure isolated state across tests by clearing mock stores and calls
 beforeEach(() => {
   if (typeof prismaMockModule.__resetMocks === "function")
     prismaMockModule.__resetMocks();
@@ -31,18 +34,17 @@ beforeEach(() => {
 describe("Auth - Register", () => {
   test("registers a user and sets auth token cookie", async () => {
     const agent = request.agent(app);
-    const res = await agent
-      .post("/api/auth/register")
-      .send({
-        email: "test@example.com",
-        name: "Test User",
-        password: "password123",
-      });
+    const res = await agent.post("/api/auth/register").send({
+      email: "test@example.com",
+      name: "Test User",
+      password: "password123",
+    });
 
     expect(res.status).toBe(201);
     const setCookie = res.headers["set-cookie"];
     expect(setCookie).toBeDefined();
 
+    // Validate that an auth-token cookie was set (array or string header)
     const hasTokenCookie = Array.isArray(setCookie)
       ? setCookie.some((c: string) => c.startsWith("auth-token="))
       : typeof setCookie === "string" && setCookie.startsWith("auth-token=");
@@ -83,7 +85,7 @@ describe("Auth - Login", () => {
       .post("/api/auth/login")
       .send({ email: "login@example.com", password: plain });
 
-    // Assert: we expect 200 and a Set-Cookie header containing `auth-token`
+    // Assert: expect 200 and a Set-Cookie header containing `auth-token`
     expect(res.status).toBe(200);
     const setCookie = res.headers["set-cookie"];
     expect(setCookie).toBeDefined();
@@ -113,6 +115,7 @@ describe("Auth - Login", () => {
       .set("Cookie", ["auth-token=existing"])
       .send({ email: "already@example.com", password: plain });
 
+    // Server should disallow login when already authenticated
     expect(res.status).toBe(400);
     expect(res.body).toHaveProperty("error", "Already authenticated");
   });

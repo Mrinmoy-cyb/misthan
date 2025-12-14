@@ -13,7 +13,12 @@
  * - The error handler returns JSON rather than HTML stack traces,
  *   which is more suitable for API clients and tests.
  */
-import express, { type Express } from "express";
+import express, {
+  type Express,
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
 import authRouter from "@/routes/auth";
 import sweetsRouter from "@/routes/sweets";
 import categoryRouter from "@/routes/category";
@@ -28,9 +33,16 @@ const app: Express = express()
     res.send("Hello, World!");
   }); // Simple health route / sanity check
 
-// Generic JSON error handler for API routes. This ensures we consistently
-// return JSON error responses instead of the default HTML error page.
-app.use((err: any, _req: any, res: any, _next: any) => {
+/**
+ * Generic JSON error handler.
+ *
+ * Ensures all unexpected errors are returned as JSON instead of HTML pages.
+ * Logs the error to stderr and responds with a standard 500 payload.
+ *
+ * Note: Place after all route registrations so it can catch downstream errors.
+ */
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  // Basic logging for visibility during development/tests
   console.error(err);
   res.status(500).json({ error: "Internal Server Error" });
 });

@@ -1,3 +1,10 @@
+/**
+ * Category routes integration tests
+ *
+ * Verifies admin-only creation, duplicate detection (case-insensitive),
+ * and authenticated listing for categories. Uses the Prisma mock to keep
+ * tests isolated and deterministic without a real database.
+ */
 // Mock Prisma at the top to avoid ESM import issues
 jest.mock("@/lib/prisma", () => ({
   __esModule: true,
@@ -9,9 +16,11 @@ import { describe, test, expect, beforeEach } from "@jest/globals";
 import jwt from "jsonwebtoken";
 import { app } from "../src/app";
 
+// Access the mock Prisma client and its reset helper
 const prismaMockModule = require("./__mocks__/prisma");
 const prismaMock = prismaMockModule.default;
 
+// Ensure clean state across tests
 beforeEach(() => {
   if (typeof prismaMockModule.__resetMocks === "function")
     prismaMockModule.__resetMocks();

@@ -1,7 +1,9 @@
 /**
- * tests/sweets.test.ts
+ * Sweets routes integration tests
  *
- * Tests for the POST /api/sweets endpoint.
+ * Validates authorization rules, input validation, listing, searching, and
+ * inventory operations (purchase/restock) for the sweets API. Prisma is
+ * mocked to keep the suite deterministic and fast.
  */
 
 // Mock Prisma at the top to avoid ESM import issues
@@ -15,9 +17,11 @@ import { describe, test, expect, beforeEach } from "@jest/globals";
 import jwt from "jsonwebtoken";
 import { app } from "../src/app";
 
+// Access the mock Prisma client and utilities
 const prismaMockModule = require("./__mocks__/prisma");
 const prismaMock = prismaMockModule.default;
 
+// Reset mock state before each test to avoid cross-test interference
 beforeEach(() => {
   if (typeof prismaMock.__resetMocks === "function") prismaMock.__resetMocks();
 });
@@ -545,6 +549,7 @@ describe("POST /api/sweets", () => {
         expect(resOk.body.sweet).toHaveProperty("stock", 6);
       });
     });
+    // Validate Zod error formatting on invalid create payload
     test("POST invalid payload returns detailed errors", async () => {
       const token = jwt.sign({ sub: admin.id, email: admin.email }, SECRET);
 

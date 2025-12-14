@@ -4,8 +4,25 @@ import prisma from "@/lib/prisma";
 import { requireAuth, requireAdmin } from "@/middleware/auth";
 import { formatZodErrors } from "@/utility/zod-error-formatter";
 
+/**
+ * Router for sweets resources.
+ *
+ * Exposes:
+ * - `POST /api/sweets` (admin only) to create sweets
+ * - `PUT /api/sweets/:id` (admin + owner) to update sweets
+ * - `DELETE /api/sweets/:id` (admin + owner) to delete sweets
+ * - `GET /api/sweets` to list sweets (auth required)
+ * - `GET /api/sweets/search` to search sweets (auth required)
+ * - `POST /api/sweets/:id/purchase` to purchase quantity (auth required)
+ * - `POST /api/sweets/:id/restock` to restock (admin + owner)
+ */
 const router: Router = express.Router();
 
+/**
+ * Schema for creating a `Sweet`.
+ * Validates required fields and provides custom messages used by
+ * `formatZodErrors` to return structured errors to clients.
+ */
 const CreateSweetSchema = z.object({
   name: z
     .string({ error: "Name is required" })
@@ -38,12 +55,16 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
   if (!category) return res.status(400).json({ error: "Invalid category" });
 
   const sweet = await prisma.sweet.create({
-    data: { name, price, stock, categoryId, userId: (req as any).user.id },
+    data: { name, price, stock, categoryId, userId: req.user!.id },
   });
 
   return res.status(201).json({ sweet });
 });
 
+/**
+ * Schema for updating a `Sweet`.
+ * - All fields optional but at least one must be provided.
+ */
 // Update a sweet - only admin and only the creator can update
 const UpdateSweetSchema = z
   .object({
@@ -56,6 +77,12 @@ const UpdateSweetSchema = z
     message: "At least one field is required",
   });
 
+/**
+ * PUT /api/sweets/:id
+ * - Requires authentication and admin role.
+ * - Only the sweet owner (creator) may update the sweet.
+ * - Validates the payload and returns 400 with structured errors when invalid.
+ */
 router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = UpdateSweetSchema.safeParse(req.body);
 
@@ -69,7 +96,7 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
   if (!sweet) return res.status(404).json({ error: "Not found" });
 
   // Only the creator can modify
-  if (sweet.userId !== (req as any).user.id)
+  if (sweet.userId !== req.user!.id)
     return res
       .status(403)
       .json({ error: "Only sweet owner allowed to update" });
@@ -82,6 +109,11 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
   return res.status(200).json({ sweet: updated });
 });
 
+/**
+ * DELETE /api/sweets/:id
+ * - Requires authentication and admin role.
+ * - Only the sweet owner (creator) may delete the sweet.
+ */
 // Delete a sweet - only admin and only the creator
 router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
   const id = req.params.id;
@@ -90,7 +122,7 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
 
   if (!sweet) return res.status(404).json({ error: "Not found" });
 
-  if (sweet.userId !== (req as any).user.id)
+  if (sweet.userId !== req.user!.id)
     return res
       .status(403)
       .json({ error: "Only sweet owner allowed to delete" });
@@ -100,6 +132,11 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
   return res.status(200).json({ deleted: true });
 });
 
+/**
+ * GET /api/sweets
+ * - Returns all sweets and includes relations (`category`, `user`).
+ * - Authentication is required.
+ */
 // GET / - list all sweets (auth required)
 router.get("/", requireAuth, async (_req, res) => {
   const sweets = await prisma.sweet.findMany({
@@ -112,17 +149,30 @@ router.get("/", requireAuth, async (_req, res) => {
   return res.status(200).json({ sweets });
 });
 
+/**
+ * Search utilities
+ */
 // GET /search - search sweets by name, category, or price range (auth required)
-const emptyToUndefined = z
-  .string()
-  .trim()
-  .transform((v) => (v === "" ? undefined : v));
 
+/**
+ * Query schema for `GET /api/sweets/search`.
+ * Accepts `name`, `categoryId`, `priceMin`, and `priceMax`.
+ * Coerces numeric values and enforces `priceMin <= priceMax` when both
+ * are present.
+ */
 export const SearchQuery = z
   .object({
-    name: emptyToUndefined.optional(),
+    name: z
+      .string()
+      .trim()
+      .transform((v) => (v === "" ? undefined : v))
+      .optional(),
 
-    categoryId: emptyToUndefined.optional(),
+    categoryId: z
+      .string()
+      .trim()
+      .transform((v) => (v === "" ? undefined : v))
+      .optional(),
 
     priceMin: z.coerce.number().nonnegative().optional(),
 
@@ -139,6 +189,12 @@ export const SearchQuery = z
     },
   );
 
+/**
+ * GET /api/sweets/search
+ * - Requires authentication.
+ * - Returns sweets that match filters for name (case-insensitive partial
+ *   match), categoryId, and price range.
+ */
 router.get("/search", requireAuth, async (req, res) => {
   const parsed = SearchQuery.safeParse(req.query);
 
@@ -187,6 +243,9 @@ router.get("/search", requireAuth, async (req, res) => {
   return res.status(200).json({ sweets });
 });
 
+/**
+ * Schema for operations that require a numeric `quantity`.
+ */
 // POST /:id/purchase - purchase a quantity (auth required)
 const QuantitySchema = z.object({
   quantity: z.coerce
@@ -195,6 +254,12 @@ const QuantitySchema = z.object({
     .positive({ message: "Quantity must be a positive integer" }),
 });
 
+/**
+ * POST /api/sweets/:id/purchase
+ * - Authenticated users may purchase a positive integer quantity of a
+ *   sweet if enough stock is available.
+ * - Returns 400 when requested quantity exceeds available stock.
+ */
 router.post("/:id/purchase", requireAuth, async (req, res) => {
   const parsed = QuantitySchema.safeParse(req.body);
 
@@ -218,6 +283,11 @@ router.post("/:id/purchase", requireAuth, async (req, res) => {
   return res.status(200).json({ sweet: updated });
 });
 
+/**
+ * POST /api/sweets/:id/restock
+ * - Admin users who originally created the sweet may add stock.
+ * - Validates `quantity` and returns the updated sweet.
+ */
 // POST /:id/restock - add stock (admin + owner)
 router.post("/:id/restock", requireAuth, requireAdmin, async (req, res) => {
   const parsed = QuantitySchema.safeParse(req.body);
@@ -230,7 +300,7 @@ router.post("/:id/restock", requireAuth, requireAdmin, async (req, res) => {
   const sweet = await prisma.sweet.findUnique({ where: { id } as any });
   if (!sweet) return res.status(404).json({ error: "Not found" });
 
-  if (sweet.userId !== (req as any).user.id)
+  if (sweet.userId !== req.user!.id)
     return res
       .status(403)
       .json({ error: "Only sweet owner allowed to restock" });
