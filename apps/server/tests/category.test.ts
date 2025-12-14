@@ -92,7 +92,13 @@ describe("POST /api/category", () => {
     expect(res.body).toHaveProperty("error", "Category already exists");
   });
 
-  test("GET /api/category returns all categories", async () => {
+  test("GET /api/category requires authentication", async () => {
+    const res = await request(app).get("/api/category");
+    expect(res.status).toBe(401);
+    expect(res.body).toHaveProperty("error");
+  });
+
+  test("GET /api/category returns all categories when authenticated", async () => {
     await prismaMock.category.create({
       data: { name: "Alpha", description: "" },
     });
@@ -100,7 +106,22 @@ describe("POST /api/category", () => {
       data: { name: "Beta", description: "" },
     });
 
-    const res = await request(app).get("/api/category");
+    const user = await prismaMock.user.create({
+      data: {
+        email: "viewer@example.com",
+        name: "Viewer",
+        password: "x",
+        role: "USER",
+      },
+    });
+    const token = require("jsonwebtoken").sign(
+      { sub: user.id, email: user.email },
+      process.env.JWT_SECRET || "test-secret",
+    );
+
+    const res = await request(app)
+      .get("/api/category")
+      .set("Cookie", [`auth-token=${token}`]);
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("categories");
     expect(Array.isArray(res.body.categories)).toBe(true);
