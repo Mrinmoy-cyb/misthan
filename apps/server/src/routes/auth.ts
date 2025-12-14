@@ -149,4 +149,50 @@ router.post("/login", async (req, res) => {
   return res.status(200).json({ user: publicUser });
 });
 
+/**
+ * GET /me
+ *
+ * Returns the currently authenticated user's information.
+ * Requires a valid auth-token cookie.
+ */
+router.get("/me", async (req, res) => {
+  // Extract auth-token from cookies
+  const cookieHeader = req.headers?.cookie ?? "";
+  const authTokenCookie = cookieHeader
+    .split(";")
+    .find((c) => c.trim().startsWith("auth-token="));
+
+  if (!authTokenCookie) {
+    return res.status(401).json({ error: "Not authenticated" });
+  }
+
+  const token = authTokenCookie.split("=")[1];
+  const secret = process.env.JWT_SECRET || "test-secret";
+
+  try {
+    const decoded = jwt.verify(token, secret) as { sub: string; email: string };
+    const user = await prisma.user.findUnique({ where: { id: decoded.sub } });
+
+    if (!user) {
+      return res.status(401).json({ error: "User not found" });
+    }
+
+    const { password: _pw, ...publicUser } = user as any;
+    return res.status(200).json({ user: publicUser });
+  } catch (error) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+});
+
+/**
+ * POST /logout
+ *
+ * Clears the auth-token cookie to log the user out.
+ */
+router.post("/logout", (req, res) => {
+  res.clearCookie("auth-token");
+
+  return res.status(200).json({ message: "Logged out successfully" });
+});
+
 export default router;
