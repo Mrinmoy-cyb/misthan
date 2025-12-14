@@ -6,8 +6,9 @@
  * for the interface.
  */
 import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useSweets, useCategories, useSearchSweets } from '../lib/hooks'
+import { useAuth } from '../contexts/AuthContext'
 import {
   Card,
   CardHeader,
@@ -25,11 +26,27 @@ export const Route = createFileRoute('/')({
 })
 
 function Home() {
+  const navigate = useNavigate()
+  const { user, isLoading: authLoading } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [priceMin, setPriceMin] = useState('')
   const [priceMax, setPriceMax] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+
+  // Redirect to login if not authenticated
+  if (authLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    navigate({ to: '/login' })
+    return null
+  }
 
   // Determine if we should search
   const hasFilters = Boolean(
@@ -53,7 +70,6 @@ function Home() {
   const sweets = hasFilters ? searchQuery_result.data : sweetsQuery.data
   const isLoading = hasFilters ? searchQuery_result.isLoading : sweetsQuery.isLoading
   const isError = hasFilters ? searchQuery_result.isError : sweetsQuery.isError
-  const error = hasFilters ? searchQuery_result.error : sweetsQuery.error
 
   const handleClearFilters = () => {
     setSearchQuery('')
@@ -205,7 +221,7 @@ function Home() {
                         <Badge variant="secondary">Low Stock</Badge>
                       )}
                       {sweet.stock === 0 && (
-                        <Badge variant="destructive">Out of Stock</Badge>
+                        <Badge variant="outline" className="bg-red-100 text-red-800">Out of Stock</Badge>
                       )}
                     </div>
                     {sweet.category && (

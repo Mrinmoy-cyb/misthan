@@ -7,8 +7,7 @@
  */
 import axios from "axios";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
 /**
  * Configured axios instance for API requests
@@ -84,4 +83,55 @@ export interface Category {
 export async function fetchCategories(): Promise<Category[]> {
   const response = await apiClient.get<{ categories: Category[] }>("/category");
   return response.data.categories;
+}
+
+/**
+ * User data type
+ */
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: "USER" | "ADMIN";
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Register a new user
+ */
+export async function register(data: {
+  email: string;
+  name: string;
+  password: string;
+  role?: "USER" | "ADMIN";
+}): Promise<{ user: User }> {
+  const response = await apiClient.post<{ user: User }>("/auth/register", data);
+  return response.data;
+}
+
+/**
+ * Login user
+ */
+export async function login(data: {
+  email: string;
+  password: string;
+}): Promise<{ user: User }> {
+  const response = await apiClient.post<{ user: User }>("/auth/login", data);
+  return response.data;
+}
+
+/**
+ * Get current user (requires auth)
+ */
+export async function getCurrentUser(): Promise<User> {
+  const response = await apiClient.get<{ user: User }>("/auth/me");
+  return response.data.user;
+}
+
+/**
+ * Logout user
+ */
+export async function logout(): Promise<void> {
+  await apiClient.post("/auth/logout");
 }
